@@ -371,7 +371,6 @@ def other_function():
     pass
 ```
 
-**Tag Merging and Validation Rules**
 
 1.  **Validation (Important):** Tags (global or function-specific) will **only** be saved to Weaviate if their key (e.g., `run_id`, `team`, `priority`) was first defined in the `.weaviate_properties` file (Step 1). Tags not defined in the schema are **ignored**, and a warning is logged at startup.
 
@@ -383,6 +382,34 @@ def other_function():
 * `other_function()` execution log: `{"run_id": "override-run-xyz", "team": "default-team"}`
 
 -----
+
+### 🚀 Real-time Error Alerting (Webhook)
+
+Beyond just logging, `VectorWave` can send **real-time notifications via webhook** the instant an error occurs. This functionality is built directly into the tracer and can be activated simply by updating your `.env` file.
+
+**How it Works:**
+1.  An exception is raised within a function decorated by `@trace_span` or `@vectorize`.
+2.  The tracer catches the exception in its `except` block and immediately calls the `alerter` object.
+3.  The alerter reads the `.env` configuration and uses the `WebhookAlerter` to dispatch the error details to your specified URL.
+4.  The notification is optimized for **Discord Embeds**, sending a rich report including the error code, trace ID, captured attributes (`user_id`, etc.), and the full stack trace.
+
+**How to Enable:**
+Add the following two variables to your `test_ex/.env` file (or environment variables):
+
+```ini
+# .env file
+
+# 1. Set the alerter strategy to 'webhook'. (Default: "none")
+ALERTER_STRATEGY="webhook"
+
+# 2. Provide your webhook URL from Discord, Slack, etc.
+ALERTER_WEBHOOK_URL="[https://discord.com/api/webhooks/YOUR_HOOK_ID/](https://discord.com/api/webhooks/YOUR_HOOK_ID/)..."
+With just these two lines, running test_ex/example.py will now instantly send a Discord alert when the CustomValueError is raised.
+
+Extensibility (Strategy Pattern): The alerting system is built on a Strategy Pattern. You can easily extend it by implementing the BaseAlerter interface to support other channels like email, PagerDuty, or more.
+
+**Tag Merging and Validation Rules**
+```
 
 ## 🤝 Contributing
 

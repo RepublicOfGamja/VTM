@@ -370,6 +370,7 @@ def other_function():
     pass
 ```
 
+
 **태그 병합 및 유효성 검사 규칙**
 
 1.  **유효성 검사 (중요):** 태그(전역 또는 함수별)는 **반드시** `.weaviate_properties` 파일(1단계)에 키(예: `run_id`, `team`, `priority`)가 먼저 정의된 경우에만 Weaviate에 저장됩니다. 스키마에 정의되지 않은 태그는 **무시**되며, 스크립트 시작 시 경고가 출력됩니다.
@@ -381,6 +382,32 @@ def other_function():
 * `process_payment()` 실행 로그: `{"run_id": "global-run-abc", "team": "billing", "priority": 1}`
 * `other_function()` 실행 로그: `{"run_id": "override-run-xyz", "team": "default-team"}`
 -----
+
+### 🚀 실시간 에러 알림 (Webhook)
+
+`VectorWave`는 단순한 로그 저장을 넘어, **에러 발생 즉시** 웹훅(Webhook)을 통해 실시간 알림을 보낼 수 있습니다. 이 기능은 `tracer`에 내장되어 있으며, 별도 설정 없이 `.env` 파일 수정만으로 활성화할 수 있습니다.
+
+**작동 방식:**
+1.  `@trace_span` 또는 `@vectorize` 데코레이터가 적용된 함수에서 예외(Exception)가 발생합니다.
+2.  `tracer`가 `except` 블록에서 에러를 감지하는 즉시, `alerter` 객체를 호출합니다.
+3.  `alerter`는 `.env` 설정을 읽어 `WebhookAlerter`를 사용, 설정된 URL로 에러 정보를 발송합니다.
+4.  알림은 **Discord Embed** 형식에 최적화되어, 에러 코드, 트레이스 ID, 캡처된 속성(`user_id` 등) 및 전체 스택 트레이스를 포함한 상세한 리포트를 전송합니다.
+
+**활성화 방법:**
+`test_ex/.env` 파일 (또는 환경 변수)에 다음 두 변수를 추가하세요.
+
+```ini
+# .env 파일
+
+# 1. 알림 전략을 'webhook'으로 설정합니다. (기본값: "none")
+ALERTER_STRATEGY="webhook"
+
+# 2. Discord 또는 Slack 등에서 발급받은 웹훅 URL을 입력합니다.
+ALERTER_WEBHOOK_URL="[https://discord.com/api/webhooks/YOUR_HOOK_ID/](https://discord.com/api/webhooks/YOUR_HOOK_ID/)..."
+이 두 줄만 추가하고 test_ex/example.py를 실행하면, CustomValueError가 발생하는 시점에 즉시 Discord로 알림이 전송됩니다.
+
+확장성 (전략 패턴): 이 알림 시스템은 전략 패턴으로 설계되었습니다. BaseAlerter 인터페이스를 구현하여 이메일, PagerDuty 등 원하는 다른 알림 채널로 쉽게 확장할 수 있습니다.
+```
 
 ## 🤝 기여 (Contributing)
 
