@@ -28,6 +28,68 @@ def _build_weaviate_filters(filters: Optional[Dict[str, Any]]) -> _Filters | Non
     return wvc.query.Filter.all_of(filter_list)
 
 
+def search_errors_by_message(
+        query: str,
+        limit: int = 5,
+        filters: Optional[Dict[str, Any]] = None
+) -> List[Dict[str, Any]]:
+    """
+    [NEW] Searches the 'VectorWaveExecutions' collection for
+    semantically similar error logs using a natural language query.
+    """
+    try:
+        settings: WeaviateSettings = get_weaviate_settings()
+        client: weaviate.WeaviateClient = get_cached_client()
+
+        collection = client.collections.get(settings.EXECUTION_COLLECTION_NAME)
+
+        # [NEW] By default, only search for logs with "ERROR" status
+        base_filters = {"status": "ERROR"}
+        if filters:
+            base_filters.update(filters)
+
+        weaviate_filter = _build_weaviate_filters(base_filters)
+
+        vectorizer = get_vectorizer()
+        if not vectorizer:
+            logger.error("Cannot perform vector search: No Python vectorizer (e.g., 'huggingface' or 'openai_client') is configured in .env.")
+            raise WeaviateConnectionError("Cannot perform vector search: No Python vectorizer configured.")
+
+        try:
+            logger.info("Vectorizing error query...")
+            query_vector = vectorizer.embed(query)
+        except Exception as e:
+            logger.error(f"Query vectorization failed: {e}")
+            raise WeaviateConnectionError(f"Query vectorization failed: {e}")
+
+        logger.info(f"Performing near_vector search for errors matching: '{query}'")
+        response = collection.query.near_vector(
+            near_vector=query_vector,
+            limit=limit,
+            filters=weaviate_filter,
+            # [NEW] Return metadata (distance) along with properties useful for error analysis
+            return_metadata=wvc.query.MetadataQuery(distance=True),
+            return_properties=[
+                "function_name", "error_message", "error_code",
+                "timestamp_utc", "trace_id", "parent_span_id", "span_id"
+            ]
+        )
+
+        results = [
+            {
+                "properties": obj.properties,
+                "metadata": obj.metadata,
+                "uuid": obj.uuid
+            }
+            for obj in response.objects
+        ]
+        return results
+
+    except Exception as e:
+        logger.error("Error during Weaviate error search: %s", e)
+        raise WeaviateConnectionError(f"Failed to execute 'search_errors_by_message': {e}")
+
+
 def search_functions(query: str, limit: int = 5, filters: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
     """
     Searches function definitions from the [VectorWaveFunctions] collection using natural language (nearText).
