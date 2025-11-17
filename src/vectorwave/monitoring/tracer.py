@@ -23,9 +23,11 @@ class TraceCollector:
         self.settings: WeaviateSettings = get_weaviate_settings()
         self.batch = get_batch_manager()
         self.alerter: BaseAlerter = get_alerter()
+        self.alert_sent: bool = False
 
 
 current_tracer_var: ContextVar[Optional[TraceCollector]] = ContextVar('current_tracer', default=None)
+current_span_id_var: ContextVar[Optional[str]] = ContextVar('current_span_id', default=None)
 
 
 def _capture_span_attributes(
@@ -77,12 +79,15 @@ def _create_span_properties(
         status: str,
         error_msg: Optional[str],
         error_code: Optional[str],
-        captured_attributes: Dict[str, Any]
+        captured_attributes: Dict[str, Any],
+        my_span_id: str,
+        parent_span_id: Optional[str]
 ) -> Dict[str, Any]:
     duration_ms = (time.perf_counter() - start_time) * 1000
     span_properties = {
         "trace_id": tracer.trace_id,
-        "span_id": str(uuid4()),
+        "span_id": my_span_id,
+        "parent_span_id": parent_span_id,
         "function_name": func.__name__,
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
         "duration_ms": duration_ms,
@@ -115,6 +120,7 @@ def trace_root() -> Callable:
                 trace_id = kwargs.pop('trace_id', str(uuid4()))
                 tracer = TraceCollector(trace_id=trace_id)
                 token = current_tracer_var.set(tracer)
+                token_span = current_span_id_var.set(None)
 
                 try:
                     return await func(*args, **kwargs)
@@ -132,6 +138,8 @@ def trace_root() -> Callable:
                 trace_id = kwargs.pop('trace_id', str(uuid4()))
                 tracer = TraceCollector(trace_id=trace_id)
                 token = current_tracer_var.set(tracer)
+                token_span = current_span_id_var.set(None)
+
 
                 try:
                     return func(*args, **kwargs)
@@ -162,6 +170,10 @@ def trace_span(
                 if not tracer:
                     return await func(*args, **kwargs)
 
+                parent_span_id = current_span_id_var.get()
+                my_span_id = str(uuid4())
+                token = current_span_id_var.set(my_span_id)
+
                 start_time = time.perf_counter()
                 status = "SUCCESS"
                 error_msg = None
@@ -181,11 +193,14 @@ def trace_span(
                     error_code = _determine_error_code(tracer, e)
 
                     span_properties = _create_span_properties(
-                        tracer, func, start_time, status, error_msg, error_code, captured_attributes
+                        tracer, func, start_time, status, error_msg, error_code, captured_attributes, my_span_id=my_span_id,
+                        parent_span_id=parent_span_id
                     )
 
                     try:
-                        tracer.alerter.notify(span_properties)
+                        if not tracer.alert_sent:
+                            tracer.alerter.notify(span_properties)
+                            tracer.alert_sent = True
                     except Exception as alert_e:
                         logger.warning(f"Alerter failed to notify: {alert_e}")
 
@@ -194,7 +209,8 @@ def trace_span(
                 finally:
                     if status == "SUCCESS":
                         span_properties = _create_span_properties(
-                            tracer, func, start_time, status, error_msg, error_code, captured_attributes
+                            tracer, func, start_time, status, error_msg, error_code, captured_attributes, my_span_id=my_span_id,
+                            parent_span_id=parent_span_id
                         )
 
                     if span_properties:
@@ -207,6 +223,8 @@ def trace_span(
                             logger.error("Failed to log span for '%s' (trace_id: %s): %s", func.__name__,
                                          tracer.trace_id, e)
 
+                    current_span_id_var.reset(token)
+
                 return result
 
             return async_wrapper
@@ -217,6 +235,10 @@ def trace_span(
                 tracer = current_tracer_var.get()
                 if not tracer:
                     return func(*args, **kwargs)
+
+                parent_span_id = current_span_id_var.get()
+                my_span_id = str(uuid4())
+                token = current_span_id_var.set(my_span_id)
 
                 start_time = time.perf_counter()
                 status = "SUCCESS"
@@ -237,11 +259,14 @@ def trace_span(
                     error_code = _determine_error_code(tracer, e)
 
                     span_properties = _create_span_properties(
-                        tracer, func, start_time, status, error_msg, error_code, captured_attributes
+                        tracer, func, start_time, status, error_msg, error_code, captured_attributes, my_span_id=my_span_id,
+                        parent_span_id=parent_span_id
                     )
 
                     try:
-                        tracer.alerter.notify(span_properties)
+                        if not tracer.alert_sent:
+                            tracer.alerter.notify(span_properties)
+                            tracer.alert_sent = True
                     except Exception as alert_e:
                         logger.warning(f"Alerter failed to notify: {alert_e}")
 
@@ -250,7 +275,8 @@ def trace_span(
                 finally:
                     if status == "SUCCESS":
                         span_properties = _create_span_properties(
-                            tracer, func, start_time, status, error_msg, error_code, captured_attributes
+                            tracer, func, start_time, status, error_msg, error_code, captured_attributes, my_span_id=my_span_id,
+                            parent_span_id=parent_span_id
                         )
 
                     if span_properties:
@@ -262,6 +288,8 @@ def trace_span(
                         except Exception as e:
                             logger.error("Failed to log span for '%s' (trace_id: %s): %s", func.__name__,
                                          tracer.trace_id, e)
+
+                    current_span_id_var.reset(token)
 
                 return result
 
