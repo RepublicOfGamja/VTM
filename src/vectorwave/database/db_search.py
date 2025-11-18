@@ -4,6 +4,7 @@ import weaviate.classes as wvc
 from typing import Dict, Any, Optional, List
 
 from weaviate.collections.classes.filters import _Filters
+from weaviate.classes.query import Filter
 
 from ..models.db_config import get_weaviate_settings, WeaviateSettings
 from .db import get_cached_client
@@ -16,16 +17,46 @@ from datetime import datetime
 # Create module-level logger
 logger = logging.getLogger(__name__)
 
+
 def _build_weaviate_filters(filters: Optional[Dict[str, Any]]) -> _Filters | None:
     if not filters:
         return None
-    filter_list = [
-        wvc.query.Filter.by_property(key).equal(value)
-        for key, value in filters.items()
-    ]
+
+    filter_list = []
+
+    for key, value in filters.items():
+        parts = key.split('__')
+        prop_name = parts[0]
+        operator = parts[1] if len(parts) > 1 else 'equal'
+
+        try:
+            prop = Filter.by_property(prop_name)
+
+            if operator == 'equal':
+                filter_list.append(prop.equal(value))
+            elif operator == 'not_equal':
+                filter_list.append(prop.not_equal(value))
+            elif operator == 'gte':  # Greater than or equal
+                filter_list.append(prop.greater_or_equal(value))
+            elif operator == 'gt':  # Greater than
+                filter_list.append(prop.greater_than(value))
+            elif operator == 'lte':  # Less than or equal
+                filter_list.append(prop.less_or_equal(value))
+            elif operator == 'lt':  # Less than
+                filter_list.append(prop.less_than(value))
+            elif operator == 'like':
+                filter_list.append(prop.like(f"*{value}*"))
+            else:
+                logger.warning(f"Unsupported filter operator: {operator}. Defaulting to 'equal'.")
+                filter_list.append(prop.equal(value))
+
+        except Exception as e:
+            logger.error(f"Failed to build filter for {key}: {e}")
+
     if not filter_list:
         return None
-    return wvc.query.Filter.all_of(filter_list)
+
+    return Filter.all_of(filter_list)
 
 
 def search_errors_by_message(
@@ -52,7 +83,8 @@ def search_errors_by_message(
 
         vectorizer = get_vectorizer()
         if not vectorizer:
-            logger.error("Cannot perform vector search: No Python vectorizer (e.g., 'huggingface' or 'openai_client') is configured in .env.")
+            logger.error(
+                "Cannot perform vector search: No Python vectorizer (e.g., 'huggingface' or 'openai_client') is configured in .env.")
             raise WeaviateConnectionError("Cannot perform vector search: No Python vectorizer configured.")
 
         try:
