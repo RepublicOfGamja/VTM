@@ -149,3 +149,38 @@ def test_get_settings_loads_global_custom_values(mock_env_get, mock_open_file, m
 
     # "EXPERIMENT_ID" should not be included as os.environ.get returned None.
     assert "experiment_id" not in settings.global_custom_values
+
+@patch('os.path.exists', return_value=False)
+def test_get_settings_parses_sensitive_keys(mock_exists, monkeypatch):
+    """
+    Tests whether the SENSITIVE_FIELD_NAMES environment variable is correctly parsed
+    and converted into a lowercase set (sensitive_keys).
+    """
+    monkeypatch.setenv("SENSITIVE_FIELD_NAMES", "password, Token, api_key,, secret ")
+
+    get_weaviate_settings.cache_clear()
+
+    # 2. Act
+    settings = get_weaviate_settings()
+
+    # 3. Assert
+    assert isinstance(settings.sensitive_keys, set)
+    assert len(settings.sensitive_keys) == 4 # 이제 4개가 맞습니다.
+    assert settings.sensitive_keys == {"password", "token", "api_key", "secret"}
+
+
+# [MODIFIED] @patch('os.environ.get', return_value=None) 제거, monkeypatch 인자 추가
+@patch('os.path.exists', return_value=False)
+def test_get_settings_sensitive_keys_default(mock_exists, monkeypatch): # <-- FIX: monkeypatch 사용
+    """
+    Test when there is no SENSITIVE_FIELD_NAMES environment variable set default
+    """
+    get_weaviate_settings.cache_clear()
+    monkeypatch.delenv("SENSITIVE_FIELD_NAMES", raising=False)
+
+    # 2. Act
+    settings = get_weaviate_settings()
+
+    # 3. Assert: check default for 5
+    assert settings.sensitive_keys == {"password", "api_key", "token", "secret", "auth_token"}
+    assert len(settings.sensitive_keys) == 5
