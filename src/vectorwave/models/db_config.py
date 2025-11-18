@@ -1,7 +1,7 @@
 import logging
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, Set
 import json
 import os
 
@@ -43,7 +43,10 @@ class WeaviateSettings(BaseSettings):
 
     ALERTER_STRATEGY: str = "none"
     ALERTER_WEBHOOK_URL: Optional[str] = None
-    ALERTER_MIN_LEVEL: str = "ERROR" 
+    ALERTER_MIN_LEVEL: str = "ERROR"
+
+    SENSITIVE_FIELD_NAMES: str = "password,api_key,token,secret,auth_token"
+    sensitive_keys: Set[str] = set()
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8",extra='ignore')
 
@@ -111,5 +114,17 @@ def get_weaviate_settings() -> WeaviateSettings:
             logger.warning(f"Could not read or parse '{error_file_path}': {e}")
     elif error_file_path:
         logger.info(f"Note: Failure mapping file not found at '{error_file_path}'. Skipping.")
+
+    try:
+        settings.sensitive_keys = {
+            key.strip().lower()
+            for key in settings.SENSITIVE_FIELD_NAMES.split(',')
+            if key.strip()
+        }
+        if settings.sensitive_keys:
+            logger.info(f"Initialized with {len(settings.sensitive_keys)} sensitive keys for masking.")
+    except Exception as e:
+        logger.warning(f"Failed to parse SENSITIVE_FIELD_NAMES: {e}")
+        settings.sensitive_keys = set()
 
     return settings
