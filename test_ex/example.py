@@ -124,6 +124,8 @@ try:
         except CustomValueError as ve:
             print(f"  -> Intended error caught: {ve}")
 
+        time.sleep(10)
+
         print("\nFunction calls completed.")
 
     except Exception as e:
