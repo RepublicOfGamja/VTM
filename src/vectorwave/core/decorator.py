@@ -2,6 +2,7 @@
 
 import logging
 import inspect
+import json
 from functools import wraps
 
 from weaviate.util import generate_uuid5
@@ -9,8 +10,11 @@ from weaviate.util import generate_uuid5
 from ..batch.batch import get_batch_manager
 from ..models.db_config import get_weaviate_settings
 from ..monitoring.tracer import trace_root, trace_span
+from ..monitoring.tracer import _create_input_vector_data, _deserialize_return_value
+from ..database.db_search import search_similar_execution
 from ..vectorizer.factory import get_vectorizer
 from ..utils.function_cache import function_cache_manager
+from ..utils.return_caching_utils import _check_and_return_cached_result
 
 # Create module-level logger
 logger = logging.getLogger(__name__)
@@ -18,11 +22,28 @@ logger = logging.getLogger(__name__)
 def vectorize(search_description: str,
               sequence_narrative: str,
               capture_return_value: bool = False,
+              semantic_cache: bool = False,
+              cache_threshold: float = 0.9,
               **execution_tags):
     """
     VectorWave Decorator
     ...
     """
+
+    if semantic_cache:
+        if get_vectorizer() is None:
+            logger.warning(
+                f"Semantic caching requested for '{search_description}' but no Python vectorizer is configured. "
+                f"Disabling semantic_cache."
+            )
+            semantic_cache = False
+
+    if semantic_cache and not capture_return_value:
+        logger.warning(
+            f"Semantic caching for '{search_description}' requires capture_return_value=True. "
+            f"Setting capture_return_value=True."
+        )
+        capture_return_value = True
 
     def decorator(func):
 
@@ -123,6 +144,7 @@ def vectorize(search_description: str,
                         capture_return_value=capture_return_value)
             @wraps(func)
             async def inner_wrapper(*args, **kwargs):
+
                 original_kwargs = kwargs.copy()
                 keys_to_remove = list(valid_execution_tags.keys())
                 keys_to_remove.append('function_uuid')
@@ -136,6 +158,21 @@ def vectorize(search_description: str,
 
             @wraps(func)
             async def outer_wrapper(*args, **kwargs):
+
+                if semantic_cache:
+                    # Note: We call a synchronous helper here, which is generally acceptable
+                    # for I/O bound tasks at the root of a wrapper chain.
+                    cached_result = _check_and_return_cached_result(
+                        func=func,
+                        args=args,
+                        kwargs=kwargs,
+                        function_name=func.__name__,
+                        cache_threshold=cache_threshold,
+                        is_async=True
+                    )
+                    if cached_result is not None:
+                        return cached_result
+
                 full_kwargs = kwargs.copy()
                 full_kwargs.update(valid_execution_tags)
                 full_kwargs['function_uuid'] = func_uuid
@@ -151,6 +188,7 @@ def vectorize(search_description: str,
                         capture_return_value=capture_return_value)
             @wraps(func)
             def inner_wrapper(*args, **kwargs):
+
                 original_kwargs = kwargs.copy()
                 keys_to_remove = list(valid_execution_tags.keys())
                 keys_to_remove.append('function_uuid')
@@ -164,6 +202,19 @@ def vectorize(search_description: str,
 
             @wraps(func)
             def outer_wrapper(*args, **kwargs):
+
+                if semantic_cache:
+                    cached_result = _check_and_return_cached_result(
+                        func=func,
+                        args=args,
+                        kwargs=kwargs,
+                        function_name=func.__name__,
+                        cache_threshold=cache_threshold,
+                        is_async=False
+                    )
+                    if cached_result is not None:
+                        return cached_result
+
                 full_kwargs = kwargs.copy()
                 full_kwargs.update(valid_execution_tags)
                 full_kwargs['function_uuid'] = func_uuid
