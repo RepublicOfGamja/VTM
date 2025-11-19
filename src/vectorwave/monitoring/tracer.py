@@ -139,12 +139,64 @@ def _create_span_properties(
         "return_value": return_value_to_log
     }
 
-
     if tracer.settings.global_custom_values:
         span_properties.update(tracer.settings.global_custom_values)
 
     span_properties.update(captured_attributes)
     return span_properties
+
+
+def _create_input_vector_data(
+        func_name: str,
+        args: tuple,
+        kwargs: Dict[str, Any],
+        sensitive_keys: set
+) -> Dict[str, Any]:
+    """
+    Creates a dictionary containing the processed arguments and a canonical string
+    for input vectorization (used for semantic caching).
+    """
+    # 1. Process/Mask positional and keyword arguments
+    processed_args = _mask_and_serialize(list(args), sensitive_keys)
+    processed_kwargs = _mask_and_serialize(kwargs, sensitive_keys)
+
+    # 2. Create canonical vectorization string (sort keys for hash consistency)
+    canonical_data = {
+        "function": func_name,
+        # We store both args and kwargs for robustness, as not all functions
+        # are guaranteed to have converted all args to kwargs inside the wrapper.
+        "args": processed_args,
+        "kwargs": processed_kwargs
+    }
+    vector_text = json.dumps(canonical_data, sort_keys=True)
+
+    return {
+        "text": vector_text,
+        "properties": canonical_data  # Stored for debugging/introspection
+    }
+
+
+def _deserialize_return_value(return_value_str: Optional[str]) -> Any:
+    """
+    Attempts to deserialize a return value string (stored in DB)
+    back to a Python object.
+    """
+    if return_value_str is None:
+        return None
+
+    try:
+        # Check if it was serialized as a JSON string (for dicts, lists, complex objects)
+        if return_value_str.strip().startswith('{') or return_value_str.strip().startswith('['):
+            return json.loads(return_value_str)
+
+        # Simple types or plain strings are returned as is.
+        return return_value_str
+
+    except json.JSONDecodeError:
+        return return_value_str
+    except Exception as e:
+        logger.warning(f"Failed to deserialize return value: {e}. Returning raw string.")
+        return return_value_str
 
 
 def trace_root() -> Callable:
@@ -228,8 +280,23 @@ def trace_span(
                 return_value_log: Optional[str] = None
 
                 captured_attributes = _capture_span_attributes(
-                    attributes_to_capture, kwargs, func.__name__,tracer.settings.sensitive_keys
+                    attributes_to_capture, kwargs, func.__name__, tracer.settings.sensitive_keys
                 )
+
+                if capture_return_value:
+                    vectorizer = get_vectorizer()
+                    if vectorizer:
+                        input_vector_data = _create_input_vector_data(
+                            func_name=func.__name__,
+                            args=args,
+                            kwargs=kwargs,
+                            sensitive_keys=tracer.settings.sensitive_keys
+                        )
+                        try:
+                            # If successful, this vector will be saved to the DB
+                            vector_to_add = vectorizer.embed(input_vector_data['text'])
+                        except Exception as ve:
+                            logger.warning(f"Failed to vectorize input for '{func.__name__}' (Async): {ve}")
 
                 try:
                     result = await func(*args, **kwargs)
@@ -250,8 +317,8 @@ def trace_span(
                         tracer, func, start_time, status, error_msg, error_code, captured_attributes,
                         my_span_id=my_span_id,
                         parent_span_id=parent_span_id,
-                        capture_return_value= capture_return_value,
-                        result= None,
+                        capture_return_value=capture_return_value,
+                        result=None,
                     )
 
                     try:
@@ -277,8 +344,8 @@ def trace_span(
                             tracer, func, start_time, status, error_msg, error_code, captured_attributes,
                             my_span_id=my_span_id,
                             parent_span_id=parent_span_id,
-                            capture_return_value= capture_return_value,
-                            result= return_value_log
+                            capture_return_value=capture_return_value,
+                            result=return_value_log
                         )
 
                     if span_properties:
@@ -322,6 +389,21 @@ def trace_span(
                     attributes_to_capture, kwargs, func.__name__, tracer.settings.sensitive_keys
                 )
 
+                if capture_return_value:
+                    vectorizer = get_vectorizer()
+                    if vectorizer:
+                        input_vector_data = _create_input_vector_data(
+                            func_name=func.__name__,
+                            args=args,
+                            kwargs=kwargs,
+                            sensitive_keys=tracer.settings.sensitive_keys
+                        )
+                        try:
+                            # If successful, this vector will be saved to the DB
+                            vector_to_add = vectorizer.embed(input_vector_data['text'])
+                        except Exception as ve:
+                            logger.warning(f"Failed to vectorize input for '{func.__name__}': {ve}")
+
                 try:
                     result = func(*args, **kwargs)
 
@@ -341,8 +423,8 @@ def trace_span(
                         tracer, func, start_time, status, error_msg, error_code, captured_attributes,
                         my_span_id=my_span_id,
                         parent_span_id=parent_span_id,
-                        capture_return_value= capture_return_value,
-                        result= None
+                        capture_return_value=capture_return_value,
+                        result=None
                     )
 
                     try:
@@ -368,8 +450,8 @@ def trace_span(
                             tracer, func, start_time, status, error_msg, error_code, captured_attributes,
                             my_span_id=my_span_id,
                             parent_span_id=parent_span_id,
-                            capture_return_value= capture_return_value,
-                            result= return_value_log
+                            capture_return_value=capture_return_value,
+                            result=return_value_log
                         )
 
                     if span_properties:
