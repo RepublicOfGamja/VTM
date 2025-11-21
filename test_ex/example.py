@@ -72,7 +72,8 @@ try:
         search_description="Process user payment and return a receipt.",
         sequence_narrative="After payment is complete, a receipt is sent via email.",
         team="billing",
-        priority=1
+        priority=1,
+        replay=True
     )
     def process_payment(user_id: str, amount: int):
         print(f"  [ROOT EXEC] process_payment: Processing payment...")
@@ -95,7 +96,8 @@ try:
     @vectorize(
         search_description="Generate a report for data analysis.",
         sequence_narrative="After the report is generated, an admin is notified.",
-        team="data-science"
+        team="data-science",
+        replay=True
     )
     def generate_report():
         print(f"  [ROOT EXEC] generate_report: Generating report...")
