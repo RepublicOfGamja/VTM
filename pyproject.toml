@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vectorwave"
-version = "0.1.7"
+version = "0.1.8"
 authors = [
     { name = "junyeonggim", email = "junyeonggim5@gmail.com" },
 ]
@@ -27,7 +27,8 @@ dependencies = [
     "weaviate-client>=4.0.0",
     "pydantic-settings>=2.0.0",
     "sentence-transformers",
-    "requests"
+    "requests",
+    "openai"
 ]
 
 [project.urls]
