@@ -1,29 +1,27 @@
-# src/vectorwave/core/decorator.py
-
-import logging
 import inspect
-import json
+import logging
 from functools import wraps
 
 from weaviate.util import generate_uuid5
-
+from typing import List, Optional
 from ..batch.batch import get_batch_manager
 from ..models.db_config import get_weaviate_settings
 from ..monitoring.tracer import trace_root, trace_span
-from ..monitoring.tracer import _create_input_vector_data, _deserialize_return_value
-from ..database.db_search import search_similar_execution
-from ..vectorizer.factory import get_vectorizer
 from ..utils.function_cache import function_cache_manager
 from ..utils.return_caching_utils import _check_and_return_cached_result
+from ..vectorizer.factory import get_vectorizer
 
 # Create module-level logger
 logger = logging.getLogger(__name__)
+
 
 def vectorize(search_description: str,
               sequence_narrative: str,
               capture_return_value: bool = False,
               semantic_cache: bool = False,
               cache_threshold: float = 0.9,
+              replay: bool = False,
+              attributes_to_capture: Optional[List[str]] = None,
               **execution_tags):
     """
     VectorWave Decorator
@@ -45,12 +43,31 @@ def vectorize(search_description: str,
         )
         capture_return_value = True
 
+    if replay and not capture_return_value:
+        capture_return_value = True
+
     def decorator(func):
 
         is_async_func = inspect.iscoroutinefunction(func)
 
         func_uuid = None
         valid_execution_tags = {}
+
+        final_attributes = ['function_uuid', 'team', 'priority', 'run_id']
+
+        if attributes_to_capture:
+            for attr in attributes_to_capture:
+                if attr not in final_attributes:
+                    final_attributes.append(attr)
+
+        if replay:
+            try:
+                sig = inspect.signature(func)
+                for param_name in sig.parameters:
+                    if param_name not in ('self', 'cls') and param_name not in final_attributes:
+                        final_attributes.append(param_name)
+            except Exception as e:
+                logger.warning(f"Failed to inspect signature for replay auto-capture in '{func.__name__}': {e}")
 
         try:
             module_name = func.__module__
@@ -130,17 +147,19 @@ def vectorize(search_description: str,
                 @wraps(func)
                 async def original_async_func_wrapper(*args, **kwargs):
                     return await func(*args, **kwargs)
+
                 return original_async_func_wrapper
             else:
                 @wraps(func)
                 def original_sync_func_wrapper(*args, **kwargs):
                     return func(*args, **kwargs)
+
                 return original_sync_func_wrapper
 
         if is_async_func:
 
             @trace_root()
-            @trace_span(attributes_to_capture=['function_uuid', 'team', 'priority', 'run_id'],
+            @trace_span(attributes_to_capture=final_attributes,
                         capture_return_value=capture_return_value)
             @wraps(func)
             async def inner_wrapper(*args, **kwargs):
@@ -184,7 +203,7 @@ def vectorize(search_description: str,
         else:  # original sync logic
 
             @trace_root()
-            @trace_span(attributes_to_capture=['function_uuid', 'team', 'priority', 'run_id'],
+            @trace_span(attributes_to_capture=final_attributes,
                         capture_return_value=capture_return_value)
             @wraps(func)
             def inner_wrapper(*args, **kwargs):
