@@ -1,6 +1,7 @@
+
 # VectorWave: Seamless Auto-Vectorization Framework
 
-[](https://www.google.com/search?q=LICENSE)
+[LICENSE](https://www.google.com/search?q=LICENSE)
 
 ## 🌟 프로젝트 소개 (Overview)
 
@@ -11,8 +12,10 @@
 ## ✨ 주요 특징 (Features)
 
 * **`@vectorize` 데코레이터:**
-  1.  **정적 데이터 수집:** 스크립트 로드 시, 함수의 소스 코드, 독스트링, 메타데이터를 `VectorWaveFunctions` 컬렉션에 1회 저장합니다.
-  2.  **동적 데이터 로깅:** 함수가 호출될 때마다 실행 시간, 성공/실패 상태, 에러 로그, 그리고 '동적 태그'를 `VectorWaveExecutions` 컬렉션에 기록합니다.
+    1.  **정적 데이터 수집:** 스크립트 로드 시, 함수의 소스 코드, 독스트링, 메타데이터를 `VectorWaveFunctions` 컬렉션에 1회 저장합니다.
+    2.  **동적 데이터 로깅:** 함수가 호출될 때마다 실행 시간, 성공/실패 상태, 에러 로그, 그리고 '동적 태그'를 `VectorWaveExecutions` 컬렉션에 기록합니다.
+* **(NEW) AI 기반 함수 문서화:** LLM(Large Language Model)을 사용하여 **`search_description`** 및 **`sequence_narrative`**를 자동으로 생성합니다. 이는 수동 작업 부담을 획기적으로 줄이고 검색 품질을 향상시킵니다.
+* **(NEW) 지연된 등록 (Deferred Registration):** LLM 문서 생성은 명시적인 호출 시에만 실행되어, 애플리케이션 시작 시 발생하는 **지연 시간(Latency)을 완벽하게 방지**합니다.
 * **시맨틱 캐싱 및 성능 최적화 (Semantic Caching and Performance Optimization):**
     * 함수 입력의 의미적 유사성(semantic similarity)을 기반으로 캐시 적중(cache hit)을 판별하여, 동일하거나 매우 유사한 입력에 대한 함수 실행을 우회하고 저장된 결과를 즉시 반환합니다.
     * 이는 특히 고비용 계산 함수(예: LLM 호출, 복잡한 데이터 처리)의 **실행 지연 시간(latency)을 크게 단축**하고 비용을 절감하는 데 효과적입니다.
@@ -93,6 +96,70 @@ print("Now calling 'process_payment'...")
 # 세 로그는 하나의 'trace_id'로 묶입니다.
 process_payment("user_789", 5000)
 ```
+
+-----
+
+### 2.1. 💡 AI Documentation Setup (LLM 설정)
+
+LLM 기능을 사용하기 위해 필요한 종속성과 환경 변수를 명시해야 합니다.
+
+> #### Prerequisites for AI Auto-Documentation
+>
+> AI 기반 문서화 기능을 사용하려면 `openai` 라이브러리가 설치되어 있어야 하며, API 키가 설정되어 있어야 합니다.
+>
+> 1.  **라이브러리 설치:**
+      >
+      >     ```bash
+>     pip install openai
+>     ```
+>
+> 2.  **API 키 설정:** `.env` 파일에 유효한 OpenAI API 키를 추가해야 합니다.
+      >
+      >     ```text
+>     OPENAI_API_KEY="sk-proj-YOUR_API_KEY_HERE"
+>     # WEAVIATE_GENERATIVE_MODULE="generative-openai" (OpenAI LLM 사용 시 Weaviate 모듈도 활성화해야 함)
+>     ```
+
+### 2.2. 🚀 Usage: Auto-Generating Metadata
+
+`@vectorize` 데코레이터와 새로운 진입점(`generate_and_register_metadata`)의 사용 순서를 설명합니다.
+
+> #### 3\. 자동 함수 메타데이터 생성 (Auto=True)
+>
+> `search_description`과 `sequence_narrative`를 수동으로 정의하는 대신, `auto=True` 플래그를 사용할 수 있습니다.
+>
+> 1.  **함수 정의 시 마킹:** `auto=True`를 설정합니다. LLM의 분석 품질을 높이기 위해 **Docstring을 상세하게 작성하는 것을 강력히 권장합니다.**
+      >
+      >     ```python
+>     # vectorwave/test_ex/example.py 내의 코드
+>     @vectorize(auto=True, team="loyalty-program")
+>     def calculate_loyalty_points(purchase_amount: int, is_vip: bool):
+>         """
+>         구매 금액에 따른 포인트 적립 계산 함수.
+>         VIP 고객은 포인트를 2배로 적립받습니다.
+>         """
+>         points = purchase_amount // 10
+>         if is_vip:
+>             points *= 2
+>         return {"points": points, "tier": "VIP" if is_vip else "Regular"}
+>     ```
+>
+> 2.  **생성 실행 트리거:** 모든 `@vectorize` 함수 정의가 완료된 **직후**에 `generate_and_register_metadata()` 함수를 호출합니다. 이 함수는 LLM을 호출하고, 생성된 메타데이터를 벡터화하여 DB에 등록합니다.
+      >
+      >     ```python
+>     # ... (위의 calculate_loyalty_points 함수 정의 후)
+>     ```
+
+> ````
+> # [필수] 모든 함수 정의가 완료된 후 호출되어야 합니다.
+> print("🚀 Checking for functions needing auto-documentation...")
+> generate_and_register_metadata()
+> ```
+> ````
+>
+> *참고: 이 프로세스는 LLM API 호출을 포함하므로, 서버 시작 시 실행하면 **지연 시간**이 발생할 수 있습니다. 운영 환경에서는 별도의 관리 스크립트나 관리자 API를 통해 실행하는 것을 권장합니다.*
+
+-----
 
 #### 시맨틱 캐싱 활용 예시 (Semantic Caching Example)
 
@@ -421,7 +488,7 @@ def other_function():
 
 ### 🚀 실시간 에러 알림 (Webhook)
 
-`VectorWave`는 단순한 로그 저장을 넘어, **에러 발생 즉시** 웹훅(Webhook)을 통해 실시간 알림을 보낼 수 있습니다. 이 기능은 `tracer`에 내장되어 있으며, 별도 설정 없이 `.env` 파일 수정만으로 활성화할 수 있습니다.
+`VectorWave`는 단순히 로그 저장을 넘어, **에러 발생 즉시** 웹훅(Webhook)을 통해 실시간 알림을 보낼 수 있습니다. 이 기능은 `tracer`에 내장되어 있으며, 별도 설정 없이 `.env` 파일 수정만으로 활성화할 수 있습니다.
 
 **작동 방식:**
 
@@ -440,13 +507,11 @@ def other_function():
 ALERTER_STRATEGY="webhook"
 
 # 2. Discord 또는 Slack 등에서 발급받은 웹훅 URL을 입력합니다.
-ALERTER_WEBHOOK_URL="[https://discord.com/api/webhooks/YOUR_HOOK_ID/](https://discord.com/api/webhooks/YOUR_HOOK_ID/)..."
+ALERTER_WEBHOOK_URL="[https://discord.com/api/webhooks/YOUR_HOOK_ID/](https://www.google.com/search?q=https://discord.com/api/webhooks/YOUR_HOOK_ID/)..."
 이 두 줄만 추가하고 test_ex/example.py를 실행하면, CustomValueError가 발생하는 시점에 즉시 Discord로 알림이 전송됩니다.
 
 확장성 (전략 패턴): 이 알림 시스템은 전략 패턴으로 설계되었습니다. BaseAlerter 인터페이스를 구현하여 이메일, PagerDuty 등 원하는 다른 알림 채널로 쉽게 확장할 수 있습니다.
 ```
-
-
 
 -----
 
