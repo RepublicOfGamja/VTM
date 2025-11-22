@@ -103,62 +103,54 @@ process_payment("user_789", 5000)
 
 LLM 기능을 사용하기 위해 필요한 종속성과 환경 변수를 명시해야 합니다.
 
-> #### Prerequisites for AI Auto-Documentation
->
-> AI 기반 문서화 기능을 사용하려면 `openai` 라이브러리가 설치되어 있어야 하며, API 키가 설정되어 있어야 합니다.
->
-> 1.  **라이브러리 설치:**
-      >
-      >     ```bash
->     pip install openai
->     ```
->
-> 2.  **API 키 설정:** `.env` 파일에 유효한 OpenAI API 키를 추가해야 합니다.
-      >
-      >     ```text
->     OPENAI_API_KEY="sk-proj-YOUR_API_KEY_HERE"
->     # WEAVIATE_GENERATIVE_MODULE="generative-openai" (OpenAI LLM 사용 시 Weaviate 모듈도 활성화해야 함)
->     ```
+#### AI 자동 문서화 필수 조건 (Prerequisites)
 
-### 2.2. 🚀 Usage: Auto-Generating Metadata
+AI 기반 문서화 기능을 사용하려면 `openai` 라이브러리가 설치되어 있어야 하며, API 키가 설정되어 있어야 합니다.
 
-`@vectorize` 데코레이터와 새로운 진입점(`generate_and_register_metadata`)의 사용 순서를 설명합니다.
+1. **라이브러리 설치:**
+    ```bash
+    pip install openai
+    ```
 
-> #### 3\. 자동 함수 메타데이터 생성 (Auto=True)
->
-> `search_description`과 `sequence_narrative`를 수동으로 정의하는 대신, `auto=True` 플래그를 사용할 수 있습니다.
->
-> 1.  **함수 정의 시 마킹:** `auto=True`를 설정합니다. LLM의 분석 품질을 높이기 위해 **Docstring을 상세하게 작성하는 것을 강력히 권장합니다.**
-      >
-      >     ```python
->     # vectorwave/test_ex/example.py 내의 코드
->     @vectorize(auto=True, team="loyalty-program")
->     def calculate_loyalty_points(purchase_amount: int, is_vip: bool):
->         """
->         구매 금액에 따른 포인트 적립 계산 함수.
->         VIP 고객은 포인트를 2배로 적립받습니다.
->         """
->         points = purchase_amount // 10
->         if is_vip:
->             points *= 2
->         return {"points": points, "tier": "VIP" if is_vip else "Regular"}
->     ```
->
-> 2.  **생성 실행 트리거:** 모든 `@vectorize` 함수 정의가 완료된 **직후**에 `generate_and_register_metadata()` 함수를 호출합니다. 이 함수는 LLM을 호출하고, 생성된 메타데이터를 벡터화하여 DB에 등록합니다.
-      >
-      >     ```python
->     # ... (위의 calculate_loyalty_points 함수 정의 후)
->     ```
+2. **API 키 설정:** `.env` 파일에 유효한 OpenAI API 키를 추가해야 합니다.
+    ```ini
+    OPENAI_API_KEY="sk-proj-YOUR_API_KEY_HERE"
+    # WEAVIATE_GENERATIVE_MODULE="generative-openai" (OpenAI LLM 사용 시 Weaviate 모듈도 활성화해야 함)
+    ```
 
-> ````
-> # [필수] 모든 함수 정의가 완료된 후 호출되어야 합니다.
-> print("🚀 Checking for functions needing auto-documentation...")
-> generate_and_register_metadata()
-> ```
-> ````
->
-> *참고: 이 프로세스는 LLM API 호출을 포함하므로, 서버 시작 시 실행하면 **지연 시간**이 발생할 수 있습니다. 운영 환경에서는 별도의 관리 스크립트나 관리자 API를 통해 실행하는 것을 권장합니다.*
+### 2.2. 🚀 사용법: 자동 함수 메타데이터 생성 (Auto=True)
 
+`search_description`과 `sequence_narrative`를 수동으로 정의하는 대신, `auto=True` 플래그를 사용할 수 있습니다.
+
+#### 3. 자동 함수 메타데이터 생성 절차
+
+1. **함수 마킹:** `auto=True`를 설정합니다. LLM의 분석 품질을 높이기 위해 **Docstring을 상세하게 작성하는 것을 강력히 권장합니다.**
+
+    ```python
+    # vectorwave/test_ex/example.py 내의 코드
+    @vectorize(auto=True, team="loyalty-program")
+    def calculate_loyalty_points(purchase_amount: int, is_vip: bool):
+        """
+        구매 금액에 따른 포인트 적립 계산 함수.
+        VIP 고객은 포인트를 2배로 적립받습니다.
+        """
+        points = purchase_amount // 10
+        if is_vip:
+            points *= 2
+        return {"points": points, "tier": "VIP" if is_vip else "Regular"}
+    ```
+
+2. **생성 실행 트리거:** 모든 `@vectorize` 함수 정의가 완료된 **직후**에 `generate_and_register_metadata()` 함수를 호출합니다. 이 함수는 LLM을 호출하고, 생성된 메타데이터를 벡터화하여 DB에 등록합니다.
+
+    ```python
+    # ... (위의 calculate_loyalty_points 함수 정의 후)
+
+    # [필수] 모든 함수 정의가 완료된 후 호출되어야 합니다.
+    print("🚀 Checking for functions needing auto-documentation...")
+    generate_and_register_metadata()
+    ```
+
+> **참고:** 이 프로세스는 LLM API 호출을 포함하므로, 서버 시작 시 실행하면 **지연 시간(Latency)**이 발생할 수 있습니다. 운영 환경에서는 별도의 관리 스크립트나 관리자 API를 통해 실행하는 것을 권장합니다.
 -----
 
 #### 시맨틱 캐싱 활용 예시 (Semantic Caching Example)

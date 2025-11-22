@@ -104,62 +104,56 @@ process_payment("user_789", 5000)
 
 To use the LLM feature, you must specify dependencies and environment variables.
 
-> #### Prerequisites for AI Auto-Documentation
->
-> To use the AI-powered documentation feature, you must have the `openai` library installed and configure your API key.
->
-> 1.  **Install Library:**
-      >
-      >     ```bash
->     pip install openai
->     ```
->
-> 2.  **Set API Key:** Add your valid OpenAI API key to your `.env` file.
-      >
-      >     ```text
->     OPENAI_API_KEY="sk-proj-YOUR_API_KEY_HERE"
->     # WEAVIATE_GENERATIVE_MODULE="generative-openai" (Required to enable the Weaviate module when using OpenAI LLM)
->     ```
+#### Prerequisites for AI Auto-Documentation
+
+To use the AI-powered documentation feature, you must have the `openai` library installed and configure your API key.
+
+1. **Install Library:**
+    ```bash
+    pip install openai
+    ```
+
+2. **Set API Key:** Add your valid OpenAI API key to your `.env` file.
+    ```ini
+    OPENAI_API_KEY="sk-proj-YOUR_API_KEY_HERE"
+    # WEAVIATE_GENERATIVE_MODULE="generative-openai" (Required to enable the Weaviate module when using OpenAI LLM)
+    ```
 
 ### 2.2. 🚀 Usage: Auto-Generating Function Metadata (Auto=True)
 
 Instead of manually defining `search_description` and `sequence_narrative`, you can use the `auto=True` flag.
 
-> #### 3\. Automatic Function Metadata Generation (Auto=True)
->
-> You can use the `auto=True` flag instead of manually defining `search_description` and `sequence_narrative`.
->
-> 1.  **Mark Function:** Set `auto=True`. It is **strongly recommended to include a detailed Docstring** to enhance the LLM's analysis quality.
-      >
-      >     ```python
->     # Code from vectorwave/test_ex/example.py
->     @vectorize(auto=True, team="loyalty-program")
->     def calculate_loyalty_points(purchase_amount: int, is_vip: bool):
->         """
->         Function to calculate loyalty points based on purchase amount.
->         VIP customers earn double points.
->         """
->         points = purchase_amount // 10
->         if is_vip:
->             points *= 2
->         return {"points": points, "tier": "VIP" if is_vip else "Regular"}
->     ```
->
-> 2.  **Trigger Generation:** Call `generate_and_register_metadata()` **immediately after** all `@vectorize` function definitions are complete. This function calls the LLM, vectorizes the generated metadata, and registers it to the DB.
-      >
-      >     ```python
->     # ... (After defining the calculate_loyalty_points function above)
->     ```
+#### 3. Automatic Function Metadata Generation (Auto=True)
 
-> ````
-> # [Mandatory] Must be called after all function definitions are complete.
-> print("🚀 Checking for functions needing auto-documentation...")
-> generate_and_register_metadata()
-> ```
-> ````
->
-> *Note: Since this process involves LLM API calls, it can cause **latency** if run during server startup. It is recommended to execute this via a separate management script or an admin API endpoint in a production environment.*
+You can use the `auto=True` flag instead of manually defining `search_description` and `sequence_narrative`.
 
+1. **Mark Function:** Set `auto=True`. It is **strongly recommended to include a detailed Docstring** to enhance the LLM's analysis quality.
+
+    ```python
+    # Code from vectorwave/test_ex/example.py
+    @vectorize(auto=True, team="loyalty-program")
+    def calculate_loyalty_points(purchase_amount: int, is_vip: bool):
+        """
+        Function to calculate loyalty points based on purchase amount.
+        VIP customers earn double points.
+        """
+        points = purchase_amount // 10
+        if is_vip:
+            points *= 2
+        return {"points": points, "tier": "VIP" if is_vip else "Regular"}
+    ```
+
+2. **Trigger Generation:** Call `generate_and_register_metadata()` **immediately after** all `@vectorize` function definitions are complete. This function calls the LLM, vectorizes the generated metadata, and registers it to the DB.
+
+    ```python
+    # ... (After defining the calculate_loyalty_points function above)
+
+    # [Mandatory] Must be called after all function definitions are complete.
+    print("🚀 Checking for functions needing auto-documentation...")
+    generate_and_register_metadata()
+    ```
+
+> **Note:** Since this process involves LLM API calls, it can cause **latency** if run during server startup. It is recommended to execute this via a separate management script or an admin API endpoint in a production environment.
 -----
 
 #### Semantic Caching Example
