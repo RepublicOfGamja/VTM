@@ -1,14 +1,15 @@
 from .base import BaseVectorizer
 from typing import List
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 try:
     from sentence_transformers import SentenceTransformer
 except ImportError:
-    # Warning: The 'sentence-transformers' library is not installed.
-    print("Warning: The 'sentence-transformers' library is not installed.")
-    # To use HuggingFaceVectorizer, run 'pip install sentence-transformers'.
-    print("To use HuggingFaceVectorizer, run 'pip install sentence-transformers'.")
+    logger.warning("The 'sentence-transformers' library is not installed.")
+    logger.warning("To use HuggingFaceVectorizer, run 'pip install sentence-transformers'.")
     SentenceTransformer = None
 
 class HuggingFaceVectorizer(BaseVectorizer):
@@ -21,7 +22,7 @@ class HuggingFaceVectorizer(BaseVectorizer):
 
         # Force use of CPU (can be changed to 'cuda', etc., if needed)
         self.model = SentenceTransformer(model_name, device='cpu')
-        print(f"[VectorWave] HuggingFaceVectorizer loaded model '{model_name}' on CPU.")
+        logger.info("HuggingFaceVectorizer loaded model '%s' on CPU.", model_name)
 
     def embed(self, text: str) -> List[float]:
         # convert_to_numpy=True is faster on CPU

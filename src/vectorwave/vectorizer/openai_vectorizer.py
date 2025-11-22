@@ -1,13 +1,14 @@
 from .base import BaseVectorizer
 from typing import List
+import logging
+
+logger = logging.getLogger(__name__)
 
 try:
     from openai import OpenAI
 except ImportError:
-    # Warning: The 'openai' library is not installed.
-    print("Warning: The 'openai' library is not installed.")
-    # To use OpenAIVectorizer, run 'pip install openai'.
-    print("To use OpenAIVectorizer, run 'pip install openai'.")
+    logger.warning("The 'openai' library is not installed.")
+    logger.warning("To use OpenAIVectorizer, run 'pip install openai'.")
     OpenAI = None
 
 
@@ -22,7 +23,7 @@ class OpenAIVectorizer(BaseVectorizer):
 
         self.client = OpenAI(api_key=api_key)
         self.model = model
-        print(f"[VectorWave] OpenAIVectorizer initialized with model '{self.model}'.")
+        logger.info("OpenAIVectorizer initialized with model '%s'.", self.model)
 
     def embed(self, text: str) -> List[float]:
         text = text.replace("\n", " ")
