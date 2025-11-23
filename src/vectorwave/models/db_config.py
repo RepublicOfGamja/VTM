@@ -49,6 +49,10 @@ class WeaviateSettings(BaseSettings):
     ALERTER_WEBHOOK_URL: Optional[str] = None
     ALERTER_MIN_LEVEL: str = "ERROR"
 
+    DRIFT_DETECTION_ENABLED: bool = False
+    DRIFT_DISTANCE_THRESHOLD: float = 0.25
+    DRIFT_NEIGHBOR_AMOUNT: int = 5
+
     SENSITIVE_FIELD_NAMES: str = "password,api_key,token,secret,auth_token"
     sensitive_keys: Set[str] = set()
 
