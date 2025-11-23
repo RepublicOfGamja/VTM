@@ -14,6 +14,7 @@ from ..batch.batch import get_batch_manager
 from ..models.db_config import get_weaviate_settings, WeaviateSettings
 from .alert.factory import get_alerter
 from ..vectorizer.factory import get_vectorizer
+from ..database.db_search import check_semantic_drift
 
 # Create module-level logger
 logger = logging.getLogger(__name__)
@@ -153,26 +154,35 @@ def _create_input_vector_data(
         sensitive_keys: set
 ) -> Dict[str, Any]:
     """
-    Creates a dictionary containing the processed arguments and a canonical string
-    for input vectorization (used for semantic caching).
+    To enhance the quality of SC and DD, we extract only
+    the core arguments and vectorize them
     """
     # 1. Process/Mask positional and keyword arguments
     processed_args = _mask_and_serialize(list(args), sensitive_keys)
     processed_kwargs = _mask_and_serialize(kwargs, sensitive_keys)
 
-    # 2. Create canonical vectorization string (sort keys for hash consistency)
+
+    texts_for_vector = [f"Function Context: {func_name}"]
+
+    for val in processed_args:
+        if val != "[MASKED]":
+            texts_for_vector.append(str(val))
+
+    for key, val in processed_kwargs.items():
+        if val != "[MASKED]":
+            texts_for_vector.append(f"{key}: {val}")
+
+    vector_text = " ".join(texts_for_vector)
+
     canonical_data = {
         "function": func_name,
-        # We store both args and kwargs for robustness, as not all functions
-        # are guaranteed to have converted all args to kwargs inside the wrapper.
         "args": processed_args,
         "kwargs": processed_kwargs
     }
-    vector_text = json.dumps(canonical_data, sort_keys=True)
 
     return {
         "text": vector_text,
-        "properties": canonical_data  # Stored for debugging/introspection
+        "properties": canonical_data
     }
 
 
@@ -348,6 +358,33 @@ def trace_span(
                             result=return_value_log
                         )
 
+                    if tracer.settings.DRIFT_DETECTION_ENABLED and vector_to_add:
+                        is_drift, dist, nearest_id = check_semantic_drift(
+                            vector=vector_to_add,
+                            function_name=func.__name__,
+                            threshold=tracer.settings.DRIFT_DISTANCE_THRESHOLD,
+                            k=tracer.settings.DRIFT_NEIGHBOR_AMOUNT
+                        )
+
+                        if is_drift:
+                            drift_alert_props = span_properties.copy()
+                            drift_alert_props["status"] = "WARNING" # 상태 변경
+                            drift_alert_props["error_code"] = "SEMANTIC_DRIFT"
+                            drift_alert_props["error_message"] = (
+                                f"Anomaly detected in data distribution.\n"
+                                f"Distance to nearest neighbor: {dist:.4f} (Threshold: {tracer.settings.DRIFT_DISTANCE_THRESHOLD})\n"
+                                f"Nearest Log UUID: {nearest_id}"
+                            )
+
+                            try:
+                                tracer.alerter.notify(drift_alert_props)
+                            except Exception as e:
+                                logger.warning(f"Failed to send drift alert: {e}")
+
+                            span_properties["status"] = "ANOMALY"
+                            span_properties["error_code"] = "SEMANTIC_DRIFT"
+                            span_properties["error_message"] = drift_alert_props["error_message"]
+
                     if span_properties:
                         try:
                             tracer.batch.add_object(
@@ -453,6 +490,33 @@ def trace_span(
                             capture_return_value=capture_return_value,
                             result=return_value_log
                         )
+
+                    if tracer.settings.DRIFT_DETECTION_ENABLED and vector_to_add:
+                        is_drift, dist, nearest_id = check_semantic_drift(
+                            vector=vector_to_add,
+                            function_name=func.__name__,
+                            threshold=tracer.settings.DRIFT_DISTANCE_THRESHOLD,
+                            k=tracer.settings.DRIFT_NEIGHBOR_AMOUNT
+                        )
+
+                        if is_drift:
+                            drift_alert_props = span_properties.copy()
+                            drift_alert_props["status"] = "WARNING" # 상태 변경
+                            drift_alert_props["error_code"] = "SEMANTIC_DRIFT"
+                            drift_alert_props["error_message"] = (
+                                f"Anomaly detected in data distribution.\n"
+                                f"Distance to nearest neighbor: {dist:.4f} (Threshold: {tracer.settings.DRIFT_DISTANCE_THRESHOLD})\n"
+                                f"Nearest Log UUID: {nearest_id}"
+                            )
+
+                            try:
+                                tracer.alerter.notify(drift_alert_props)
+                            except Exception as e:
+                                logger.warning(f"Failed to send drift alert: {e}")
+
+                            span_properties["status"] = "ANOMALY"
+                            span_properties["error_code"] = "SEMANTIC_DRIFT"
+                            span_properties["error_message"] = drift_alert_props["error_message"]
 
                     if span_properties:
                         try:
