@@ -14,6 +14,8 @@ from vectorwave.batch.batch import get_batch_manager as real_get_batch_manager
 from vectorwave.database.db import get_cached_client as real_get_cached_client
 from vectorwave.models.db_config import get_weaviate_settings as real_get_settings
 from vectorwave.vectorizer.factory import get_vectorizer as real_get_vectorizer
+from vectorwave.monitoring.tracer import _create_input_vector_data
+
 
 # --- Fixture Setup ---
 
@@ -326,7 +328,6 @@ def test_tracer_input_vector_data_and_masking(mock_caching_deps):
     """
     Tests that the _create_input_vector_data function masks sensitive keys.
     """
-    from vectorwave.monitoring.tracer import _create_input_vector_data
 
     # Arrange: settings has sensitive_keys={"secret_key"}
     settings = mock_caching_deps["settings"]
@@ -343,10 +344,12 @@ def test_tracer_input_vector_data_and_masking(mock_caching_deps):
     text_content = input_data["text"]
     assert "test_func" in text_content
     assert "amount" in text_content
-    assert "[MASKED]" in text_content
+
+    assert "[MASKED]" not in text_content
+    assert "secret_key" not in text_content
     assert "my_top_secret" not in text_content
 
-    # 2. Verification: Check if masking is included in the properties dictionary
+    # 2. Verification: Check stored properties
     props = input_data["properties"]
     assert props["function"] == "test_func"
     assert props["kwargs"]["amount"] == 100
