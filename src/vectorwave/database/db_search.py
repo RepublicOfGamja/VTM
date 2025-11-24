@@ -409,3 +409,55 @@ def check_semantic_drift(
     except Exception as e:
         logger.error(f"Failed to check semantic drift: {e}")
         return False, 0.0, None
+
+
+def simulate_drift_check(
+        text: str,
+        function_name: str,
+        threshold: Optional[float] = None,
+        k: Optional[int] = None
+) -> Dict[str, Any]:
+    """
+    Simulates drift detection for a hypothetical input string without executing the function.
+    Useful for 'Drift Radar' or debugging.
+    """
+    try:
+        settings = get_weaviate_settings()
+        vectorizer = get_vectorizer()
+
+        if not vectorizer:
+            return {"error": "No vectorizer configured."}
+
+        # 1. Set defaults from settings if not provided
+        if threshold is None:
+            threshold = settings.DRIFT_DISTANCE_THRESHOLD
+        if k is None:
+            k = settings.DRIFT_NEIGHBOR_AMOUNT
+
+        # 2. Vectorize the input text
+        try:
+            vector = vectorizer.embed(text)
+        except Exception as e:
+            return {"error": f"Vectorization failed: {e}"}
+
+        # 3. Perform the check using the existing logic
+        is_drift, avg_distance, nearest_uuid = check_semantic_drift(
+            vector=vector,
+            function_name=function_name,
+            threshold=threshold,
+            k=k
+        )
+
+        return {
+            "function_name": function_name,
+            "input_text": text,
+            "is_drift": is_drift,
+            "avg_distance": avg_distance,
+            "threshold": threshold,
+            "nearest_neighbor_uuid": nearest_uuid,
+            "status": "ANOMALY" if is_drift else "NORMAL"
+        }
+
+    except Exception as e:
+        logger.error(f"Simulation failed: {e}")
+        return {"error": str(e)}
