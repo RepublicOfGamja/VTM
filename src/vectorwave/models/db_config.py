@@ -22,6 +22,7 @@ class WeaviateSettings(BaseSettings):
     WEAVIATE_GRPC_PORT: int = 50051
     COLLECTION_NAME: str = "VectorWaveFunctions"
     EXECUTION_COLLECTION_NAME: str = "VectorWaveExecutions"
+    GOLDEN_COLLECTION_NAME: str = "VectorWaveGoldenDataset"
     IS_VECTORIZE_COLLECTION_NAME: bool = True
 
     # "weaviate_module", "huggingface", "openai_client", "none"
@@ -52,6 +53,9 @@ class WeaviateSettings(BaseSettings):
     DRIFT_DETECTION_ENABLED: bool = False
     DRIFT_DISTANCE_THRESHOLD: float = 0.25
     DRIFT_NEIGHBOR_AMOUNT: int = 5
+
+    RECOMMENDATION_STEADY_MARGIN: float = 0.05
+    RECOMMENDATION_DISCOVERY_MARGIN: float = 0.15
 
     SENSITIVE_FIELD_NAMES: str = "password,api_key,token,secret,auth_token"
     sensitive_keys: Set[str] = set()
